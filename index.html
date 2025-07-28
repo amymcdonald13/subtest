@@ -2,7 +2,8 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>OAV1 - Interactive Subtitles Overlay with Stable Tooltips</title>
+  <title>oavaInteractive Subtitles with Tooltip Pause/Resume</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <style>
     body {
       font-family: Arial, sans-serif;
@@ -65,8 +66,7 @@
       box-shadow: 0 2px 10px rgba(0,0,0,0.5);
     }
 
-    .highlight:hover .tooltip,
-    .highlight.clicked .tooltip {
+    .highlight.active .tooltip {
       display: block;
     }
   </style>
@@ -85,7 +85,6 @@
 <script>
   const video = document.getElementById("video");
   const subtitleBox = document.getElementById("subtitle");
-
   const srtUrl = "OAV1.srt";
 
   const tooltipDictionary = {
@@ -136,17 +135,14 @@
     const processedLines = lines.map(line => {
       let processedLine = line;
       const sortedPhrases = Object.keys(tooltipDictionary).sort((a, b) => b.length - a.length);
-
       sortedPhrases.forEach(phrase => {
         const regex = new RegExp(`\\b${escapeRegExp(phrase)}\\b`, 'gi');
         processedLine = processedLine.replace(regex, match => {
           return `<span class="highlight" tabindex="0">${match}<span class="tooltip">${tooltipDictionary[phrase]}</span></span>`;
         });
       });
-
       return processedLine;
     });
-
     return processedLines.join("<br>");
   }
 
@@ -167,55 +163,48 @@
   }
 
   function bindInteractionHandlers() {
-    subtitleBox.querySelectorAll(".highlight").forEach(span => {
-      span.removeEventListener("mouseenter", span._mouseenterHandler);
-      span.removeEventListener("mouseleave", span._mouseleaveHandler);
-      span.removeEventListener("click", span._clickHandler);
+    const highlights = subtitleBox.querySelectorAll(".highlight");
+
+    highlights.forEach(span => {
+      span.removeEventListener("mouseenter", span._hoverIn);
+      span.removeEventListener("mouseleave", span._hoverOut);
+      span.removeEventListener("click", span._click);
+
+      // Desktop
+      span._hoverIn = () => {
+        span.classList.add("active");
+        video.pause();
+      };
+
+      span._hoverOut = () => {
+        span.classList.remove("active");
+        video.play();
+      };
+
+      // Mobile
+      span._click = (e) => {
+        e.stopPropagation();
+        highlights.forEach(h => h.classList.remove("active"));
+        span.classList.add("active");
+        video.pause();
+      };
 
       if (isTouchDevice()) {
-        // Mobile: tap to toggle tooltip
-        span._clickHandler = e => {
-          e.stopPropagation();
-          const isActive = span.classList.contains("clicked");
-
-          subtitleBox.querySelectorAll(".highlight.clicked").forEach(el =>
-            el.classList.remove("clicked")
-          );
-
-          if (!isActive) {
-            span.classList.add("clicked");
-            video.pause();
-          } else {
-            span.classList.remove("clicked");
-            video.play();
-          }
-        };
-        span.addEventListener("click", span._clickHandler);
+        span.addEventListener("click", span._click);
       } else {
-        // Desktop: hover
-        span._mouseenterHandler = () => {
-          video.pause();
-          span.classList.add("hovered");
-        };
-
-        span._mouseleaveHandler = () => {
-          span.classList.remove("hovered");
-          video.play();
-        };
-
-        span.addEventListener("mouseenter", span._mouseenterHandler);
-        span.addEventListener("mouseleave", span._mouseleaveHandler);
+        span.addEventListener("mouseenter", span._hoverIn);
+        span.addEventListener("mouseleave", span._hoverOut);
       }
     });
   }
 
-  // Dismiss tooltip on mobile when tapping outside
+  // Resume video on tap outside (mobile)
   document.addEventListener("click", e => {
-    if (!subtitleBox.contains(e.target)) {
-      subtitleBox.querySelectorAll(".highlight.clicked").forEach(el => {
-        el.classList.remove("clicked");
-      });
-      if (isTouchDevice()) video.play();
+    if (isTouchDevice() && !subtitleBox.contains(e.target)) {
+      subtitleBox.querySelectorAll(".highlight").forEach(el =>
+        el.classList.remove("active")
+      );
+      video.play();
     }
   });
 
@@ -241,7 +230,6 @@
 
   fetchSRT(srtUrl);
 </script>
-
 
 </body>
 </html>
